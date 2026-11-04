@@ -1,4 +1,32 @@
 {
-  "rewrites": [{ "source": "/s/:token", "destination": "/share.html" }],
-  "headers": [{ "source": "/s/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }]
+  "rewrites": [
+    {
+      "source": "/s/:token",
+      "destination": "/share.html"
+    },
+    {
+      "source": "/judge",
+      "destination": "/judge.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/s/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
+    },
+    {
+      "source": "/llms.txt",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        }
+      ]
+    }
+  ]
 }

@@ -1,0 +1,23 @@
+# Consentra · Health Data Integrity
+
+> The trust layer for fragmented healthcare data. A patient's records live at several providers and don't agree. Consentra pulls every provider's copy into one passport, checks the underlying Supabase tables with Sodabase, shows conflicts side by side with source and timestamp, and shares a passport where unresolved questions are labeled — never silently merged.
+
+Built at the Supabase × Sodabase × BuilderBase NYC Hackathon, November 4, 2026. All data is synthetic: three fictional providers, 301 fictional patients, planted faults. No real person, organisation or identifier.
+
+## Try it (no login; every visitor gets a private copy of the demo patient)
+- /#/passport — every provider's copy of Noah Dixon's record, with rows "in question" marked
+- /#/scan — "Verify my health records": Consentra's cross-provider rules run in Postgres; Sodabase's per-table trust verdicts render alongside them as first-class findings
+- /#/resolve — each discrepancy side by side with source and timestamp; flag, note, attach evidence
+- /#/share — create a time-boxed share (QR / link); receipts ledger with "Verify chain"
+- /s/<token> — the clinician view a share link opens; "Request access" asks the patient for more
+- /judge.html — what to try, with expected outcomes
+
+## What's underneath (public repo: see README)
+- Supabase Database: 19 tables, FHIR-shaped, one row per provider copy; 15 indexes; 23 functions; migrations 0001–0005
+- Row Level Security on every table and on storage.objects; anon key reads nothing but public directories
+- Auth: anonymous sign-in; claim_demo_patient() clones the demo patient per visitor
+- Storage: private "evidence" bucket, folder-scoped policies, 10-minute signed URLs that die on revoke
+- Edge Functions: integrity-scan (rules + Sodabase MCP: data_trust_health, check_rule, data_trust_scan), share-evidence
+- Normalization: RxNorm/dm+d drug concepts, LOINC+UCUM unit conversions (IFCC↔NGSP), 7 jurisdictions, cross-border corridors
+- Consent ledger: append-only sha256 hash-chained receipts, verify_receipt_chain(), FHIR R4 AuditEvent export
+- Access requests: clinician asks → patient keeps/drops scopes → allow/decline → receipt

@@ -1,50 +1,74 @@
-# Consentra · Health Data Integrity
+# Consentra
 
-**Supabase × Sodabase × BuilderBase NYC Hackathon — November 4, 2026**
+## Hackathon build: health data integrity (Supabase × Sodabase)
 
-**Live:** _LIVE_URL_ · **Demo video:** _VIDEO_URL_ · **Setup & runbook:** [`docs/HACKATHON.md`](docs/HACKATHON.md)
+**Live:** <https://web-sage-alpha-25.vercel.app> · **Demo video:** `<VIDEO_URL — unlisted YouTube/Loom>` · **Details:** [`docs/HACKATHON.md`](docs/HACKATHON.md)
 
-The trust layer for fragmented healthcare data. A patient's records live at several providers and they don't agree: London has him on 10 mg of lisinopril, Boston on 20, and the practice in Ithaca doesn't know he's allergic to penicillin. Consentra pulls every provider's copy into one passport, checks the underlying Supabase tables with Sodabase, shows each conflict side by side with its source and timestamp, and shares a passport where unresolved questions are labeled — never silently merged.
+A patient's records live at several providers and disagree. Consentra pulls every provider's copy into one passport, checks the underlying Supabase tables with Sodabase, and shows conflicts side by side with source and timestamp — never silently merged.
 
-## What's built on Supabase
+**Supabase** — Postgres schema with RLS on every table (`supabase/migrations`, 0001→0005), anonymous auth into `claim_demo_patient()` (each visitor gets their own cloned record), Storage (private `evidence` bucket, folder-scoped policies, signed URLs), append-only consent receipts with a verifiable hash chain, and two edge functions (`supabase/functions/integrity-scan`, `supabase/functions/share-evidence`). Anon reads zero patient rows — only the public reference directories.
 
-| Supabase | Where | What |
-|---|---|---|
-| **Database** | [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) | 13 FHIR-shaped tables, one row per provider copy (no merging), enums, `updated_at` triggers, 11 indexes on every patient-scoped access path |
-| **Row Level Security** | every table + `storage.objects` | `owns_patient(auth.uid())` helper; `SECURITY DEFINER` RPCs with pinned `search_path`; the anon key reads nothing but the public provider directory |
-| **Auth** | anonymous sign-in → `claim_demo_patient()` | no login wall for the demo; every query is still scoped to one patient |
-| **Storage** | [`0002_evidence.sql`](supabase/migrations/0002_evidence.sql) | private `evidence` bucket (10 MB, image/PDF allow-list), folder-scoped policies, clinicians only ever get a 10-minute signed URL that dies on revoke |
-| **Edge Functions** | [`integrity-scan`](supabase/functions/integrity-scan/index.ts) · [`share-evidence`](supabase/functions/share-evidence/index.ts) | caller JWT verified server-side; secrets via `supabase secrets`; Sodabase reached over its MCP endpoint from Deno |
-| **Normalization** | [`0003_normalization.sql`](supabase/migrations/0003_normalization.sql) | RxNorm ↔ dm+d/SNOMED ↔ ATC drug concepts, LOINC + UCUM unit conversions (incl. the affine IFCC→NGSP HbA1c equation), 7 national jurisdictions and cross-border corridors seeded from primary-source research; conflicts are compared **by code in canonical units**, not by string |
-| **PostgREST / RPC** | `my_record`, `get_share`, `set_discrepancy_status`, `upsert_discrepancies` | one round trip per screen |
+**Sodabase** — watches the clinical tables; the scan calls its MCP tools (`data_trust_health`, `check_rule`, `data_trust_scan`) and renders the verdicts as first-class UI, not a checkbox.
 
-## Sodabase
+---
 
-`integrity-scan` speaks MCP (Streamable HTTP, bearer token) to `https://sodabase.io/mcp` and calls `data_trust_scan`, `data_trust_health` and `check_rule` ×3 with plain-language rules that mirror Consentra's own SQL rules. Sodabase's table verdicts (trusted / caveated / untrusted) and failing-row counts are stored as first-class findings tagged **Sodabase**, rendered next to Consentra's, and shown to the clinician. Sodabase tells us which *tables* to distrust; Consentra tells the patient which *rows*.
+Patient-controlled sharing of medical records for international travelers receiving care in the US. The patient connects their home hospital, picks exactly what to share and for how long, and shows a QR code or Apple Wallet pass. The clinician opens a read-only page in any browser, and the patient can revoke access at any time.
 
-## Rules that run across the whole cohort
+The reasons behind every choice are in [`decision.md`](decision.md). The design is in `docs/superpowers/specs/`.
 
-Six cross-provider rules in set-based SQL (`detect_discrepancies(patient)`): dose conflict (canonical drug + unit), missing allergy, stale medication, conflicting condition status, duplicate record, incomplete provider, unit mismatch. On the seeded cohort of **301 synthetic patients / ~4,000 rows** they return 712 findings; the demo patient returns exactly the 6 that were planted. Same query at 300 or 300 million rows — RLS is the tenancy, not the app.
+## What's here
 
-## The loop
-
-Sign in → **Passport** (every provider's copy, in question or verified) → **Verify** (Consentra rules + Sodabase, orb spins, verdicts land) → **Resolve** (side by side with source & timestamp; flag, note, attach evidence) → **Share** (choose categories & duration; QR / link) → **Clinician view** (verified rows plainly, unverified rows labeled, patient's note and evidence, UK units with US conversion) → **Revoke** (clinician page flips to "Access ended" within seconds; signed URLs return 403).
+| Path | What |
+|---|---|
+| `server/` | Node + Express. Fake UK hospital source (FHIR R4-shaped), share store, patient API, clinician page and Wallet pass signing. |
+| `ios/` | SwiftUI iOS 17 app (XcodeGen). Passport, Health, Share and Activity tabs. |
+| `scripts/make-pass-csr.sh` | Creates the Wallet signing key and CSR (one-time). |
+| `scripts/make-pass-icons.mjs` | Regenerates the pass images and app icon. |
 
 ## Run it
 
+> **New to the project?** Follow the step-by-step guide in [`docs/LOCAL_DEVELOPMENT.md`](docs/LOCAL_DEVELOPMENT.md). It covers setup, certificates (you don't need any to start), running on a real iPhone, tests and troubleshooting.
+
+**Requirements:** Xcode 15.4+, Node 20+, XcodeGen (`brew install xcodegen`).
+
 ```bash
-# Supabase: create a project, enable Anonymous sign-ins, then
-supabase link --project-ref <ref> && supabase db push          # 0001, 0002, 0003
-psql "$(supabase db url)" -f supabase/seed.sql                  # 301 patients
-supabase secrets set SODABASE_TOKEN=sb_pat_...                  # Sodabase → Settings → MCP
-supabase functions deploy integrity-scan --use-api
-supabase functions deploy share-evidence --use-api --no-verify-jwt
-# Web (static, no build): put the project URL + anon key in web/config.js, then
-cd web && vercel --prod
+# 1. Server (prints the LAN address that share links will use)
+cd server && npm install && npm start
+
+# 2. App
+cd ios && xcodegen && open Consentra.xcodeproj   # run on an iPhone 15 Pro simulator
 ```
 
-Everything is synthetic. Three fictional providers, fictional patients, planted faults. No real person, organisation or identifier.
+- **Simulator:** the app talks to `http://localhost:3000` by default.
+- **Real iPhone:** tap the avatar, then Settings, and enter the address the server printed, e.g. `http://10.56.1.197:3000`.
+- **Clinician device:** a phone or laptop that scans the QR must be on the **same Wi-Fi** as the Mac.
 
-## Context and disclosure
+**Wallet signing:** this needs `server/certs/pass.pem`, `pass.key` and `wwdr.pem`. They're gitignored. Other developers ask Ali for the existing files rather than creating new ones (see docs/LOCAL_DEVELOPMENT.md §4 and decision.md D11). Without certificates, everything still works except the "Add to Apple Wallet" button, which is hidden.
 
-Consentra is a Cornell Tech Product Studio venture: a patient-controlled health passport with an iOS app and Apple Wallet pass. Everything in **this** repository was written during the hackathon on November 4, 2026. The design system (palette and type) is shared with the existing product, and the first 15 seconds of the demo video show the existing iOS app for context; neither is part of this submission.
+**Reset the demo to a fresh, disconnected patient:**
+
+```bash
+lsof -ti tcp:3000 | xargs kill; rm -f server/data/state.json; (cd server && npm start)
+```
+
+## Demo script (about 3 minutes)
+
+1. **Setup.** Noah Dixon, from London, is about to see a US doctor. His records are back home at Thameside General. The Passport tab shows "Connect your records".
+2. **Connect.** Tap Connect your records, then Thameside General 🇬🇧, then Sign in, then Allow. 18 records arrive.
+3. **Choose what to share.** Go to the Share tab, then With a Provider. Type "Dr. Rivera, Mass General", tick **Allergies** and **Lab Results**, choose 24 h, and tap Create Share. Nothing is shared by default.
+4. **Present.** A QR code appears with a countdown. Tap **Add to Apple Wallet** to add a real signed pass that expires with the share.
+5. **Clinician view.** Scan the QR with another phone. The browser shows only allergies and labs, with UK units next to US conversions (`HbA1c 48 mmol/mol · US: 6.5 %`). No app, no login. Back on the patient's phone, Manage this share shows "Opened on iPhone" within 5 seconds.
+6. **Revoke.** Tap Revoke Access and confirm. Within 5 seconds the clinician's open page changes to **"Access ended"**, and the Wallet pass's QR leads to the same page. Activity shows the share being created, viewed and revoked.
+
+## Tests
+
+```bash
+cd server && npm test        # 25 tests: API, validation, clinician filtering, expiry/revoke, pass signing
+cd ios && xcodebuild test -scheme Consentra -destination 'platform=iOS Simulator,name=iPhone 15 Pro' -only-testing:ConsentraTests
+```
+
+`ConsentraUITests` walks the whole demo (connect → share → present → Wallet sheet → revoke). It needs a running server with fresh state. `testRevokeFromManageAccess` also needs something opening the share link, playing the clinician. Set `TEST_RUNNER_SCREENSHOT_DIR=/some/dir` to save a screenshot of each step.
+
+## Not in this MVP
+
+There are no patient accounts, no encryption at rest, plain HTTP on the LAN, a simulated hospital sign-in and no translation. See decision.md D8–D9.

@@ -27,6 +27,20 @@ const json = (body: unknown, status = 200) =>
 // ---------------------------------------------------------------------------
 // Minimal MCP client (Streamable HTTP, bearer auth). Enough for tools/call.
 // ---------------------------------------------------------------------------
+// Sodabase returns {"result": "<json string>"} — payload JSON-encoded a second time.
+// Unwrap one or two layers so callers see the real object.
+function unwrapResult(v: any): any {
+  for (let i = 0; i < 2; i++) {
+    if (typeof v === "string") { try { v = JSON.parse(v); } catch { return v; } continue; }
+    if (v && typeof v === "object" && typeof v.result === "string" && Object.keys(v).length <= 2) {
+      try { v = JSON.parse(v.result); } catch { return v; }
+      continue;
+    }
+    break;
+  }
+  return v;
+}
+
 class McpClient {
   #url: string; #token: string; #session: string | null = null; #id = 0;
   constructor(url: string, token: string) { this.#url = url; this.#token = token; }
@@ -80,23 +94,31 @@ class McpClient {
     const result = await this.#rpc("tools/call", { name, arguments: args }, false, timeoutMs);
     const texts = (result?.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text);
     const raw = texts.join("\n");
-    if (result?.structuredContent) return result.structuredContent;
-    try { return JSON.parse(raw); } catch { return { text: raw }; }
+    let out: any;
+    if (result?.structuredContent) out = result.structuredContent;
+    else { try { out = JSON.parse(raw); } catch { out = { text: raw }; } }
+    // Sodabase wraps every tool result as {"result": "<json string>"} — the payload is
+    // JSON encoded a second time inside that field. Unwrap it here so each caller sees
+    // the real object; without this, data_trust_health looks like it returned no tables
+    // and check_rule looks like it found nothing, with ok still true.
+    return unwrapResult(out);
   }
 }
 
 // Plain-language rules we ask Sodabase to check against the live tables.
 // These mirror Consentra's own SQL rules so the two detectors can be compared.
-const SODABASE_RULES: { dataset: string; rule: string; kind: string; severity: string; summary: (n: number) => string }[] = [
-  { dataset: "medications", kind: "rule_breach", severity: "high",
-    rule: "Rows with the same patient_id and name where status = 'active' must have the same dose_value and dose_unit across different provider_id values.",
-    summary: (n) => `Sodabase found ${n} active medication rows whose dose disagrees across providers` },
-  { dataset: "medications", kind: "rule_breach", severity: "medium",
-    rule: "Rows where status = 'active' and ended_on is null must have recorded_at within the last 24 months.",
-    summary: (n) => `Sodabase found ${n} active medications not reviewed in over 24 months` },
-  { dataset: "providers", kind: "rule_breach", severity: "low",
-    rule: "Every row must have at least one of npi or ods_code not null.",
-    summary: (n) => `Sodabase found ${n} providers with no identifier` },
+// Rules are scoped to the calling patient (qualifier + rule text), so a count shown to
+// Noah is about Noah's rows, not the cohort. Table verdicts remain table-level by nature.
+const SODABASE_RULES = (patientId: string): { dataset: string; rule: string; qualifier: string; kind: string; severity: string; summary: (n: number) => string }[] => [
+  { dataset: "medications", kind: "rule_breach", severity: "high", qualifier: `patient_id = '${patientId}'`,
+    rule: "dose_value must not be null",
+    summary: (n) => `Sodabase found ${n} of this patient's medication rows with no recorded dose` },
+  { dataset: "medications", kind: "rule_breach", severity: "medium", qualifier: `patient_id = '${patientId}'`,
+    rule: "recorded_at must not be null",
+    summary: (n) => `Sodabase found ${n} of this patient's medication rows with no recorded-at date` },
+  { dataset: "providers", kind: "rule_breach", severity: "low", qualifier: "",
+    rule: "npi must not be null",
+    summary: (n) => `Sodabase found ${n} providers in the directory with no NPI on file` },
 ];
 
 const WATCHED = ["medications", "allergies", "conditions", "observations", "immunizations", "providers", "patients"];
@@ -110,7 +132,7 @@ function verdictSeverity(v: string): string {
   }
 }
 
-async function runSodabase(scanId: string) {
+async function runSodabase(scanId: string, patientId: string) {
   const token = Deno.env.get("SODABASE_TOKEN");
   const url = Deno.env.get("SODABASE_MCP_URL") ?? "https://sodabase.io/mcp";
   if (!token) return { ok: false, reason: "SODABASE_TOKEN not set", findings: [] as any[], tables: [] as any[], rules: [] as any[] };
@@ -142,9 +164,11 @@ async function runSodabase(scanId: string) {
         kind: "table_trust", severity: verdictSeverity(verdict), record_table: short,
         fingerprint: `sodabase:table:${short}`,
         summary: problems.length
-          ? `Sodabase rates the ${short} table "${verdict}": ${problems.map((p) => `${p.name ?? p.kind ?? p.problem ?? "issue"} (${p.count ?? "?"})`).join(", ")}`
-          : `Sodabase rates the ${short} table "${verdict}"`,
-        detail: { verdict, problems, source: "data_trust_health" },
+          // Sodabase's finding objects carry label / rule / family / failing_count — not
+          // name / kind / count. Guessing those rendered every chip as "issue (?)".
+          ? `Sodabase rates the ${short} table "${verdict}" (table-wide): ${problems.map((p) => `${p.rule ?? p.label ?? p.family ?? p.name ?? p.kind ?? p.problem ?? "issue"}${(p.failing_count ?? p.count) != null ? ` (${p.failing_count ?? p.count} rows)` : ""}`).join(", ")}`
+          : `Sodabase rates the ${short} table "${verdict}" (table-wide)`,
+        detail: { verdict, problems, source: "data_trust_health", scope: "table" },
         sodabase_finding: problems[0]?.finding_id ?? problems[0]?.id ?? null,
       });
     }
@@ -153,12 +177,12 @@ async function runSodabase(scanId: string) {
 
   // Plain-language rules, in parallel, each with its own timeout.
   const ruleResults = await Promise.allSettled(
-    SODABASE_RULES.map((r) => mcp.call("check_rule", { dataset: r.dataset, rule: r.rule }, 25_000).then((res) => ({ r, res })))
+    SODABASE_RULES(patientId).map((r) => mcp.call("check_rule", { dataset: r.dataset, rule: r.rule, ...(r.qualifier ? { qualifier: r.qualifier } : {}) }, 25_000).then((res) => ({ r, res })))
   );
   for (const rr of ruleResults) {
     if (rr.status === "rejected") { out.errors.push(`check_rule: ${rr.reason?.message ?? rr.reason}`); continue; }
     const { r, res } = rr.value;
-    const n: number = Number(res?.failing_rows ?? res?.rows_breaking ?? res?.violations ?? res?.count ?? res?.failures ?? 0) || 0;
+    const n: number = Number(res?.failing_count ?? res?.failing_rows ?? res?.rows_breaking ?? res?.violations ?? res?.count ?? res?.failures ?? 0) || 0;
     out.rules.push({ dataset: r.dataset, rule: r.rule, failing: n, query: res?.query ?? res?.sql ?? null, raw: res });
     if (n > 0) {
       out.findings.push({
@@ -200,7 +224,7 @@ Deno.serve(async (req) => {
   if (e1) return json({ error: e1.message }, 500);
 
   // 2. Sodabase, over MCP.
-  const soda = await runSodabase(scan.id);
+  const soda = await runSodabase(scan.id, patient.id);
   let n2 = 0;
   if (soda.ok) {
     const { data, error } = await svc.rpc("upsert_discrepancies", { p: patient.id, scan: scan.id, detector: "sodabase", findings: soda.findings });
@@ -219,6 +243,8 @@ Deno.serve(async (req) => {
     tables_checked: WATCHED,
   };
   await svc.from("integrity_scans").update({ finished_at: new Date().toISOString(), sodabase_ok: soda.ok, summary }).eq("id", scan.id);
+  // Consent ledger: a scan is an event the patient can show a clinician (migration 0004).
+  await svc.rpc("record_scan_receipt", { p: patient.id, scan: scan.id, open_total: summary.open_total, sodabase_ok: soda.ok }).then(() => {}, () => {});
 
   return json({ scan_id: scan.id, patient: patient.id, summary });
 });

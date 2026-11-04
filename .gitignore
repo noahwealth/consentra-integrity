@@ -1,6 +1,22 @@
+# Secrets — never commit
+server/certs/*
+!server/certs/.gitkeep
+
+# Runtime data
+server/data/
+node_modules/
+
+# Xcode
+ios/*.xcodeproj
+ios/build/
+DerivedData/
+xcuserdata/
+.DS_Store
+.superpowers/
+
 supabase/.temp/
 supabase/.branches/
 web/.vercel/
-.env
-*.tok
-.DS_Store
+supabase/functions/**/.env
+
+.export/

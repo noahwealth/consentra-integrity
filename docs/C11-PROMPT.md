@@ -31,7 +31,7 @@ Steps, in order. Stop and show me the output after each one.
    Screenshot each screen into docs/screenshots/.
 
 5. Package for submission.
-   - git grep -n 'sb_pat_' and git grep -n 'service_role' must return nothing in tracked files (the words in docs/ are fine; actual key values are not).
+   - the shape-based secrets gate must return nothing.
    - Put the README block from docs/HACKATHON.md §6 at the top of README.md with the real live URL and video URL.
    - Commit on the branch and push: git push -u origin feat/hackathon-integrity. Give me the branch URL. Do not merge to main and do not change repo visibility; I do both myself.
 
