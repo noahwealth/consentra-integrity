@@ -1,0 +1,6 @@
+supabase/.temp/
+supabase/.branches/
+web/.vercel/
+.env
+*.tok
+.DS_Store

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Consentra — Health Passport</title>
+  <meta name="description" content="The trust layer for fragmented healthcare data. One passport, every provider's copy, and a scan that finds what is missing, stale or in conflict." />
+  <meta name="theme-color" content="#000000" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@450;500;600;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="nav__inner">
+      <a class="nav__brand" href="#/passport"><img class="nav__mark" src="assets/mark.png" alt="" /><span class="nav__word">Consentra</span></a>
+      <nav class="nav__links" id="tabs" hidden>
+        <a href="#/passport" data-tab="passport"><span class="lbl">Passport</span></a>
+        <a href="#/scan" data-tab="scan"><span class="lbl">Integrity</span><span class="nav__count" id="pill-open" hidden></span></a>
+        <a href="#/resolve" data-tab="resolve"><span class="lbl">Resolve</span></a>
+        <a href="#/share" data-tab="share"><span class="lbl">Share</span></a>
+      </nav>
+      <div class="nav__user" id="who"></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="gridbg"></div>
+    <div class="glow"></div>
+    <div class="wrap">
+      <section id="signin" class="hero">
+        <p class="eyebrow center">Cornell Tech · Product Studio · Health data integrity</p>
+        <h1 class="hero__title"><span class="line">Your records live in</span><span class="line grad">three hospitals.</span><span class="line">They don't agree.</span></h1>
+        <p class="hero__sub">Consentra pulls every provider's copy into one passport, checks the underlying tables with Sodabase, and shows you exactly where your record is missing, stale or in conflict — before a clinician relies on it.</p>
+        <div class="hero__cta">
+          <button class="btn btn--lg" id="btn-signin">Open Noah's passport</button>
+          <a class="btn btn--ghost btn--lg" href="https://github.com/ali-abdullah/consentra" target="_blank" rel="noopener">How it's built</a>
+        </div>
+        <div class="hero__mark float"><img src="assets/logo-3d.png" alt="" /></div>
+      </section>
+      <div class="streak" id="streak"></div>
+      <section id="view" class="page" hidden></section>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

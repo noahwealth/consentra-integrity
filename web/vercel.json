@@ -1,0 +1,4 @@
+{
+  "rewrites": [{ "source": "/s/:token", "destination": "/share.html" }],
+  "headers": [{ "source": "/s/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }]
+}

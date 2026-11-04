@@ -1,0 +1,16 @@
+# Minimal Supabase CLI config. `supabase link` fills in project_id.
+project_id = "consentra"
+
+[db.seed]
+enabled = true
+# Generated demo data only (3 fictional providers, 301 patients). The helpers in
+# seed/_local_*.sql are a plain-Postgres test rig and must never run against a
+# hosted project: _local_grants.sql grants anon full access and defeats RLS.
+sql_paths = ["./seed.sql"]
+
+[functions.integrity-scan]
+verify_jwt = true
+
+[functions.share-evidence]
+# Clinicians are anonymous; the share token is the credential, checked in SQL.
+verify_jwt = false
