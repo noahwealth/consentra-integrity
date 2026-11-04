@@ -2,7 +2,7 @@
 
 ## Hackathon build: global health data integrity (Supabase × Sodabase)
 
-## BEST VIEWED IN MOBILE WINDOW PANE SIZE - BUILT FOR MOBILE USE w/ APPLE WALLET FEATURES (SWIFT APP BUILT AS WELL IF INTERESTED LET NOAH KNOW :) 
+## BEST VIEWED IN MOBILE WINDOW PANE SIZE - BUILT FOR MOBILE USE (SWIFT APP BUILT AS WELL IF INTERESTED LET NOAH KNOW :) 
 
 **Live:** <https://web-sage-alpha-25.vercel.app> ·  · **Details:** [`docs/HACKATHON.md`](docs/HACKATHON.md)
 
