@@ -2,6 +2,8 @@
 
 ## Hackathon build: global health data integrity (Supabase × Sodabase)
 
+## BEST VIEWED IN MOBILE WINDOW PANE SIZE - BUILT FOR MOBILE USE w/ APPLE WALLET FEATURES (SWIFT APP BUILT AS WELL IF INTERESTED LET NOAH KNOW :) 
+
 **Live:** <https://web-sage-alpha-25.vercel.app> ·  · **Details:** [`docs/HACKATHON.md`](docs/HACKATHON.md)
 
 A patient's records live at several providers and disagree. Consentra pulls every provider's copy into one passport, checks the underlying Supabase tables with Sodabase, and shows conflicts side by side with source and timestamp — never silently merged.
